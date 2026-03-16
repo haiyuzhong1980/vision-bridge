@@ -1,0 +1,126 @@
+{
+  "id": "vision-bridge",
+  "name": "Vision Bridge",
+  "version": "0.1.0",
+  "description": "Cross-channel image understanding bridge for OpenClaw.",
+  "author": "haiyuzhong1980",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable the plugin."
+      },
+      "debug": {
+        "type": "boolean",
+        "default": false,
+        "description": "Enable verbose logs."
+      },
+      "autoInject": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "maxRecentMessages": {
+            "type": "number",
+            "default": 8
+          }
+        }
+      },
+      "limits": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxImageBytes": {
+            "type": "number",
+            "default": 15728640
+          },
+          "maxImageCount": {
+            "type": "number",
+            "default": 4
+          },
+          "maxSummaryChars": {
+            "type": "number",
+            "default": 4000
+          }
+        }
+      },
+      "ocr": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "paddleocr",
+              "macos_vision",
+              "auto"
+            ],
+            "default": "auto"
+          },
+          "fallbackOrder": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["paddleocr", "macos_vision"]
+            },
+            "default": ["macos_vision", "paddleocr"]
+          },
+          "timeoutMs": {
+            "type": "number",
+            "default": 30000
+          }
+        }
+      },
+      "vision": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "heuristic"
+            ],
+            "default": "heuristic"
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Plugin"
+    },
+    "debug": {
+      "label": "Debug Mode"
+    },
+    "autoInject.enabled": {
+      "label": "Auto Inject"
+    },
+    "autoInject.maxRecentMessages": {
+      "label": "Max Recent Messages"
+    },
+    "limits.maxImageBytes": {
+      "label": "Max Image Bytes"
+    },
+    "limits.maxImageCount": {
+      "label": "Max Image Count"
+    },
+    "ocr.provider": {
+      "label": "OCR Provider"
+    },
+    "ocr.fallbackOrder": {
+      "label": "OCR Fallback Order"
+    },
+    "vision.provider": {
+      "label": "Vision Provider"
+    }
+  }
+}
