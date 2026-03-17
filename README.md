@@ -6,7 +6,7 @@ An [OpenClaw](https://github.com/haiyuzhong1980) plugin that provides cross-chan
 
 - **Multi-provider OCR** — PaddleOCR (Python) and macOS Vision Framework with automatic fallback
 - **Heuristic vision** — rule-based image classification without requiring a cloud vision API
-- **6 image classifications** — `screenshot`, `document`, `photo`, `qrcode`, `chart`, `unknown`
+- **6 image classifications** — `chat_screenshot`, `document_scan`, `receipt_or_invoice`, `photo_scene`, `chart_or_dashboard`, `mixed_unknown`
 - **Structured extraction** — pulls amounts, dates, items, references from receipts, invoices, and forms
 - **Multi-image comparison** — diff and similarity scoring across multiple images in one message
 - **Auto-injection** — OCR and vision results are automatically inserted into the agent's context window
@@ -17,7 +17,7 @@ An [OpenClaw](https://github.com/haiyuzhong1980) plugin that provides cross-chan
 image received
     │
     ▼
-[classify]  → screenshot | document | photo | qrcode | chart | unknown
+[classify]  → chat_screenshot | document_scan | receipt_or_invoice | photo_scene | chart_or_dashboard | mixed_unknown
     │
     ▼
 [OCR]  (auto → macos_vision → paddleocr fallback)

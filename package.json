@@ -6,7 +6,7 @@
   "description": "Cross-channel OpenClaw plugin for deterministic image understanding.",
   "scripts": {
     "smoke": "node --experimental-strip-types ./smoke-test.ts",
-    "test": "node --experimental-strip-types --test tests/*.ts"
+    "test": "node --experimental-transform-types --import ./tests/register-loader.mjs --test tests/*.ts"
   },
   "engines": {
     "node": ">=22"

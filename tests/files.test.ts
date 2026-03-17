@@ -52,7 +52,35 @@ describe("inferMimeType", () => {
   });
 
   it("returns application/octet-stream for unknown extensions", () => {
-    assert.equal(inferMimeType("/path/to/file.bmp"), "application/octet-stream");
+    assert.equal(inferMimeType("/path/to/file.xyz"), "application/octet-stream");
+  });
+
+  it("returns image/bmp for .bmp files", () => {
+    assert.equal(inferMimeType("/path/to/file.bmp"), "image/bmp");
+  });
+
+  it("returns image/heic for .heic files", () => {
+    assert.equal(inferMimeType("/path/to/file.heic"), "image/heic");
+  });
+
+  it("returns image/heic for .heif files", () => {
+    assert.equal(inferMimeType("/path/to/file.heif"), "image/heic");
+  });
+
+  it("returns image/tiff for .tiff files", () => {
+    assert.equal(inferMimeType("/path/to/file.tiff"), "image/tiff");
+  });
+
+  it("returns image/tiff for .tif files", () => {
+    assert.equal(inferMimeType("/path/to/file.tif"), "image/tiff");
+  });
+
+  it("returns image/avif for .avif files", () => {
+    assert.equal(inferMimeType("/path/to/file.avif"), "image/avif");
+  });
+
+  it("returns image/svg+xml for .svg files", () => {
+    assert.equal(inferMimeType("/path/to/file.svg"), "image/svg+xml");
   });
 
   it("is case-insensitive for extension matching", () => {

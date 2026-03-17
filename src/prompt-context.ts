@@ -21,21 +21,21 @@ export async function buildVisionPromptContext(params: {
     return undefined;
   }
 
-  const results: string[] = [];
-  for (const filePath of paths) {
-    try {
-      const analyzed = await analyzeImageFile({
-        filePath,
-        config: params.config,
-        hint: "auto_inbound_context",
-      });
-      results.push(`${analyzed.imageBlock}\n\n${serializeVisionHandoff(analyzed.handoff)}`);
-    } catch (error) {
-      results.push(
-        `[Image]\nKind: analysis_failed\nSummary: Failed to analyze ${filePath}.\nWarnings: ${String(error)}`,
-      );
-    }
-  }
+  const analyzed = await Promise.all(
+    paths.map(async (filePath) => {
+      try {
+        const result = await analyzeImageFile({
+          filePath,
+          config: params.config,
+          hint: "auto_inbound_context",
+        });
+        return `${result.imageBlock}\n\n${serializeVisionHandoff(result.handoff)}`;
+      } catch (error) {
+        return `[Image]\nKind: analysis_failed\nSummary: Failed to analyze ${filePath}.\nWarnings: ${String(error)}`;
+      }
+    }),
+  );
+  const results = analyzed;
 
   if (results.length === 0) {
     return undefined;

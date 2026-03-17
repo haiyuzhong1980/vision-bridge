@@ -1,4 +1,5 @@
 import type { ClassificationResult, ImageInput, OcrResult } from "./types.ts";
+import { unique } from "./utils.ts";
 
 export function classifyImage(input: ImageInput): ClassificationResult {
   const lower = `${input.fileName} ${input.hint ?? ""}`.toLowerCase();
@@ -185,6 +186,3 @@ function countMatches(text: string, patterns: string[]): number {
   return patterns.filter((pattern) => text.includes(pattern)).length;
 }
 
-function unique(values: string[]): string[] {
-  return [...new Set(values)];
-}

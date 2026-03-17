@@ -5,6 +5,7 @@ import type {
   VisionBridgeConfig,
   VisionResult,
 } from "../types.ts";
+import { unique } from "../utils.ts";
 import {
   buildChartSignals,
   buildChartHints,
@@ -120,6 +121,3 @@ function pickDocumentEntities(lines: string[]): string[] {
   return entities;
 }
 
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
-}

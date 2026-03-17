@@ -8,6 +8,11 @@ export function inferMimeType(filePath: string): string {
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".heic") || lower.endsWith(".heif")) return "image/heic";
+  if (lower.endsWith(".bmp")) return "image/bmp";
+  if (lower.endsWith(".tiff") || lower.endsWith(".tif")) return "image/tiff";
+  if (lower.endsWith(".avif")) return "image/avif";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
   return "application/octet-stream";
 }
 

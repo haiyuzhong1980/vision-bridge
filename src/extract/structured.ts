@@ -1,4 +1,5 @@
 import type { ImageKind, OcrResult } from "../types.ts";
+import { unique } from "../utils.ts";
 
 export function buildKeyFields(kind: ImageKind, ocr: OcrResult): Record<string, string> {
   const fields: Record<string, string> = {};
@@ -26,7 +27,7 @@ export function buildKeyFields(kind: ImageKind, ocr: OcrResult): Record<string, 
     const date = matchFirst(
       ocr.text,
       /\b20\d{2}[\/\-.]\d{1,2}[\/\-.]\d{1,2}\b/,
-      /\b\d{4}年\d{1,2}月\d{1,2}日\b/,
+      /(?<![a-zA-Z0-9])\d{4}年\d{1,2}月\d{1,2}日(?![a-zA-Z0-9])/,
     );
     if (amount) fields.amount = amount;
     if (date) fields.date = date;
@@ -132,6 +133,3 @@ function matchFirst(text: string, ...patterns: RegExp[]): string {
   return "";
 }
 
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
-}

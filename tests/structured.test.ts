@@ -70,13 +70,10 @@ describe("buildKeyFields – receipt_or_invoice", () => {
     assert.equal(fields.date, "2024-03-15");
   });
 
-  it("does not extract date from Chinese date pattern due to \\b boundary limitation with CJK", () => {
-    // The regex /\b\d{4}年\d{1,2}月\d{1,2}日\b/ uses word boundaries that do not
-    // work with CJK characters in JavaScript. This is a known limitation of the
-    // current implementation — the date will be undefined for Chinese-only date strings.
+  it("extracts date from Chinese date pattern", () => {
     const ocr = makeOcr("日期: 2024年3月15日\n合计 50");
     const fields = buildKeyFields("receipt_or_invoice", ocr);
-    assert.equal(fields.date, undefined);
+    assert.equal(fields.date, "2024年3月15日");
   });
 });
 

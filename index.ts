@@ -37,36 +37,42 @@ function createVisionAnalyzeTool(api: PluginApi) {
       required: ["filePath"],
     },
     execute: async (_toolCallId: string, args: unknown) => {
-      const filePath =
-        typeof (args as Record<string, unknown>).filePath === "string"
-          ? ((args as Record<string, unknown>).filePath as string).trim()
-          : "";
-      const hint =
-        typeof (args as Record<string, unknown>).hint === "string"
-          ? ((args as Record<string, unknown>).hint as string).trim()
-          : undefined;
+      try {
+        const filePath =
+          typeof (args as Record<string, unknown>).filePath === "string"
+            ? ((args as Record<string, unknown>).filePath as string).trim()
+            : "";
+        const hint =
+          typeof (args as Record<string, unknown>).hint === "string"
+            ? ((args as Record<string, unknown>).hint as string).trim()
+            : undefined;
 
-      if (!filePath) {
+        if (!filePath) {
+          return {
+            content: [{ type: "text", text: "vision_analyze requires a non-empty filePath." }],
+          };
+        }
+
+        const config = loadVisionBridgeConfig(api);
+        const result = await analyzeImageFile({ filePath, hint, config });
+        if (config.debug) {
+          api.logger.info(
+            `vision_analyze kind=${result.normalized.kind} file=${result.normalized.source.fileName}`,
+          );
+        }
         return {
-          content: [{ type: "text", text: "vision_analyze requires a non-empty filePath." }],
+          content: [
+            {
+              type: "text",
+              text: `${result.imageBlock}\n\n${serializeVisionHandoff(result.handoff)}\n\nJSON:\n${JSON.stringify(result.normalized, null, 2)}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Vision analysis failed: ${String(error)}` }],
         };
       }
-
-      const config = loadVisionBridgeConfig(api);
-      const result = await analyzeImageFile({ filePath, hint, config });
-      if (config.debug) {
-        api.logger.info(
-          `vision_analyze kind=${result.normalized.kind} file=${result.normalized.source.fileName}`,
-        );
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `${result.imageBlock}\n\n${serializeVisionHandoff(result.handoff)}\n\nJSON:\n${JSON.stringify(result.normalized, null, 2)}`,
-          },
-        ],
-      };
     },
   });
 }
@@ -93,41 +99,47 @@ function createVisionCompareTool(api: PluginApi) {
       required: ["filePaths"],
     },
     execute: async (_toolCallId: string, args: unknown) => {
-      const rawFilePaths = Array.isArray((args as Record<string, unknown>).filePaths)
-        ? ((args as Record<string, unknown>).filePaths as unknown[])
-        : [];
-      const filePaths = rawFilePaths
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-      const hint =
-        typeof (args as Record<string, unknown>).hint === "string"
-          ? ((args as Record<string, unknown>).hint as string).trim()
-          : undefined;
+      try {
+        const rawFilePaths = Array.isArray((args as Record<string, unknown>).filePaths)
+          ? ((args as Record<string, unknown>).filePaths as unknown[])
+          : [];
+        const filePaths = rawFilePaths
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0);
+        const hint =
+          typeof (args as Record<string, unknown>).hint === "string"
+            ? ((args as Record<string, unknown>).hint as string).trim()
+            : undefined;
 
-      if (filePaths.length < 2) {
+        if (filePaths.length < 2) {
+          return {
+            content: [{ type: "text", text: "vision_compare requires at least two non-empty file paths." }],
+          };
+        }
+
+        const config = loadVisionBridgeConfig(api);
+        const result = await compareImageFiles({ filePaths, hint, config });
         return {
-          content: [{ type: "text", text: "vision_compare requires at least two non-empty file paths." }],
+          content: [
+            {
+              type: "text",
+              text:
+                `${result.block}\n\nJSON:\n${JSON.stringify(result.comparison, null, 2)}\n\nAnalyses:\n` +
+                result.analyses
+                  .map(
+                    (item) =>
+                      `${item.imageBlock}\n\n${serializeVisionHandoff(item.handoff)}\n\nJSON:\n${JSON.stringify(item.normalized, null, 2)}`,
+                  )
+                  .join("\n\n---\n\n"),
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: `Vision analysis failed: ${String(error)}` }],
         };
       }
-
-      const config = loadVisionBridgeConfig(api);
-      const result = await compareImageFiles({ filePaths, hint, config });
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-              `${result.block}\n\nJSON:\n${JSON.stringify(result.comparison, null, 2)}\n\nAnalyses:\n` +
-              result.analyses
-                .map(
-                  (item) =>
-                    `${item.imageBlock}\n\n${serializeVisionHandoff(item.handoff)}\n\nJSON:\n${JSON.stringify(item.normalized, null, 2)}`,
-                )
-                .join("\n\n---\n\n"),
-          },
-        ],
-      };
     },
   });
 }
