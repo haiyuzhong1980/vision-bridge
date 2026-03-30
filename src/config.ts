@@ -54,8 +54,10 @@ export function validateVisionBridgeConfig(config: VisionBridgeConfig): {
   if (config.limits.maxImageCount <= 0) errors.push("limits.maxImageCount must be > 0");
   if (config.limits.maxSummaryChars <= 0) errors.push("limits.maxSummaryChars must be > 0");
   if (config.ocr.timeoutMs <= 0) errors.push("ocr.timeoutMs must be > 0");
-  if (!Array.isArray(config.ocr.fallbackOrder) || config.ocr.fallbackOrder.length === 0) {
-    errors.push("ocr.fallbackOrder must contain at least one provider");
+  if (config.ocr.provider !== "disabled") {
+    if (!Array.isArray(config.ocr.fallbackOrder) || config.ocr.fallbackOrder.length === 0) {
+      errors.push("ocr.fallbackOrder must contain at least one provider when OCR is enabled");
+    }
   }
   return { valid: errors.length === 0, errors };
 }

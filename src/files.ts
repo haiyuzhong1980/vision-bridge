@@ -40,6 +40,7 @@ export async function buildImageInput(
     fileName: path.basename(filePath),
     mimeType,
     sizeBytes: info.size,
+    modifiedMs: info.mtimeMs,
     hint,
   };
 }

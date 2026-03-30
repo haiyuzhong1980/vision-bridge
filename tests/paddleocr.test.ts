@@ -1,12 +1,18 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import {
+  OCR_MIN_PROVIDER_TIMEOUT_MS,
+  OCR_PROVIDER_TIMEOUT_CAP_MS,
   buildEmptyOcrResult,
   hasOcrText,
   isConfiguredOcrProvider,
   getOcrProviderName,
   getEffectiveOcrProviderLabel,
+  resolveProviderAttemptTimeoutMs,
+  resolveProviderOrder,
+  resolveRemainingOcrBudget,
   summarizeOcrLines,
+  shouldAttemptOcrProvider,
   truncateOcrWarnings,
   ensureOcrWarnings,
   mergeOcrWarnings,
@@ -123,6 +129,64 @@ describe("getEffectiveOcrProviderLabel", () => {
     // We can't easily mock process.platform, but we can test that the label is a string
     const label = getEffectiveOcrProviderLabel(undefined);
     assert.ok(typeof label === "string" && label.length > 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveProviderOrder
+// ---------------------------------------------------------------------------
+describe("resolveProviderOrder", () => {
+  it("prepends explicit provider and de-dupes fallback providers", () => {
+    assert.deepEqual(
+      resolveProviderOrder(makeConfig("macos_vision", ["paddleocr", "macos_vision"])),
+      ["macos_vision", "paddleocr"],
+    );
+  });
+
+  it("uses fallback order as-is when provider is auto", () => {
+    assert.deepEqual(
+      resolveProviderOrder(makeConfig("auto", ["macos_vision", "paddleocr"])),
+      ["macos_vision", "paddleocr"],
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OCR budget helpers
+// ---------------------------------------------------------------------------
+describe("OCR budget helpers", () => {
+  it("shrinks remaining budget based on elapsed time", () => {
+    assert.equal(resolveRemainingOcrBudget(1_000, 5_000, 3_000), 3_000);
+  });
+
+  it("never returns a negative remaining budget", () => {
+    assert.equal(resolveRemainingOcrBudget(1_000, 5_000, 8_000), 0);
+  });
+
+  it("skips provider attempts when remaining budget falls below the minimum", () => {
+    assert.equal(shouldAttemptOcrProvider(OCR_MIN_PROVIDER_TIMEOUT_MS - 1), false);
+    assert.equal(shouldAttemptOcrProvider(OCR_MIN_PROVIDER_TIMEOUT_MS), true);
+  });
+
+  it("caps macOS Vision attempts to a provider-specific maximum", () => {
+    assert.equal(
+      resolveProviderAttemptTimeoutMs("macos_vision", 45_000),
+      OCR_PROVIDER_TIMEOUT_CAP_MS.macos_vision,
+    );
+  });
+
+  it("caps PaddleOCR attempts to a provider-specific maximum", () => {
+    assert.equal(
+      resolveProviderAttemptTimeoutMs("paddleocr", 45_000),
+      OCR_PROVIDER_TIMEOUT_CAP_MS.paddleocr,
+    );
+  });
+
+  it("never returns less than the minimum provider timeout floor", () => {
+    assert.equal(
+      resolveProviderAttemptTimeoutMs("paddleocr", OCR_MIN_PROVIDER_TIMEOUT_MS - 200),
+      OCR_MIN_PROVIDER_TIMEOUT_MS,
+    );
   });
 });
 

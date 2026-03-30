@@ -1,4 +1,4 @@
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 // We test the pure, non-async parts that are exported or accessible via
@@ -17,7 +17,13 @@ import assert from "node:assert/strict";
 // that disables autoInject.
 // ---------------------------------------------------------------------------
 
-import { buildVisionPromptContext } from "../src/prompt-context.ts";
+import {
+  AUTO_CONTEXT_MAX_TIMEOUT_MS,
+  AUTO_CONTEXT_MIN_TIMEOUT_MS,
+  buildAutoContextFallbackEntry,
+  buildVisionPromptContext,
+  resolveAutoContextTimeoutMs,
+} from "../src/prompt-context.ts";
 import type { VisionBridgeConfig } from "../src/types.ts";
 
 function makeConfig(
@@ -178,5 +184,43 @@ describe("buildVisionPromptContext – output format", () => {
       // We allow up to 3 occurrences (imageBlock + handoff JSON path)
       assert.ok(occurrences <= 4, `path appeared ${occurrences} times, expected deduplication`);
     }
+  });
+});
+
+describe("resolveAutoContextTimeoutMs", () => {
+  it("caps auto-context analysis timeout at the configured maximum", () => {
+    const config = makeConfig(true);
+    config.ocr.timeoutMs = 45_000;
+    assert.equal(resolveAutoContextTimeoutMs(config), AUTO_CONTEXT_MAX_TIMEOUT_MS);
+  });
+
+  it("floors auto-context analysis timeout at the configured minimum", () => {
+    const config = makeConfig(true);
+    config.ocr.timeoutMs = 1_000;
+    assert.equal(resolveAutoContextTimeoutMs(config), AUTO_CONTEXT_MIN_TIMEOUT_MS);
+  });
+});
+
+describe("buildAutoContextFallbackEntry", () => {
+  it("builds a timeout fallback entry with a stable warning code", () => {
+    const entry = buildAutoContextFallbackEntry(
+      "/tmp/slow-image.png",
+      "analysis_timed_out",
+      "auto_context_timeout_12000ms",
+    );
+    assert.ok(entry.includes("Kind: analysis_timed_out"), entry);
+    assert.ok(entry.includes("slow-image.png"), entry);
+    assert.ok(entry.includes("auto_context_timeout_12000ms"), entry);
+  });
+
+  it("builds a failure fallback entry with the basename only", () => {
+    const entry = buildAutoContextFallbackEntry(
+      "/tmp/missing-image.png",
+      "analysis_failed",
+      "ENOENT",
+    );
+    assert.ok(entry.includes("Kind: analysis_failed"), entry);
+    assert.ok(entry.includes("missing-image.png"), entry);
+    assert.ok(!entry.includes("/tmp/missing-image.png"), entry);
   });
 });

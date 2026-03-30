@@ -33,6 +33,7 @@ export interface ImageInput {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
+  modifiedMs: number;
   hint?: string;
 }
 

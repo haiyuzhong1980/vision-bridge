@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 import type { ImageInput, OcrResult, VisionBridgeConfig } from "../types.ts";
@@ -8,9 +8,18 @@ const execFileAsync = promisify(execFile);
 
 type OcrProviderName = "paddleocr" | "macos_vision";
 
+const MACOS_VISION_BUILD_TIMEOUT_MS = 60_000;
+export const OCR_MIN_PROVIDER_TIMEOUT_MS = 1_500;
+export const OCR_PROVIDER_TIMEOUT_CAP_MS: Record<OcrProviderName, number> = {
+  macos_vision: 12_000,
+  paddleocr: 8_000,
+};
+let macOsVisionBinaryPromise: Promise<string | null> | null = null;
+
 export async function runPaddleOcr(
   input: ImageInput,
   config: VisionBridgeConfig,
+  signal?: AbortSignal,
 ): Promise<OcrResult> {
   if (config.ocr.provider === "disabled") {
     return buildEmptyOcrResult("disabled", "OCR provider is disabled");
@@ -18,9 +27,19 @@ export async function runPaddleOcr(
 
   const providers = resolveProviderOrder(config);
   const warnings: string[] = [];
+  const startedAtMs = Date.now();
 
   for (const provider of providers) {
-    const result = await runProvider(provider, input, config);
+    const remainingMs = resolveRemainingOcrBudget(startedAtMs, config.ocr.timeoutMs);
+    if (!shouldAttemptOcrProvider(remainingMs)) {
+      warnings.push(
+        `Skipped ${provider}: remaining OCR budget ${remainingMs}ms is below ${OCR_MIN_PROVIDER_TIMEOUT_MS}ms`,
+      );
+      break;
+    }
+
+    const attemptTimeoutMs = resolveProviderAttemptTimeoutMs(provider, remainingMs);
+    const result = await runProvider(provider, input, config, attemptTimeoutMs, signal);
     if (hasOcrText(result.text) || result.lines.length > 0) {
       return {
         ...result,
@@ -42,16 +61,20 @@ async function runProvider(
   provider: OcrProviderName,
   input: ImageInput,
   config: VisionBridgeConfig,
+  timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<OcrResult> {
   if (provider === "macos_vision") {
-    return runMacOsVision(input, config);
+    return runMacOsVision(input, config, timeoutMs, signal);
   }
-  return runPaddleProvider(input, config);
+  return runPaddleProvider(input, config, timeoutMs, signal);
 }
 
 async function runPaddleProvider(
   input: ImageInput,
   config: VisionBridgeConfig,
+  timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<OcrResult> {
   const pythonScript = path.resolve(
     path.dirname(new URL(import.meta.url).pathname),
@@ -61,7 +84,8 @@ async function runPaddleProvider(
 
   try {
     const { stdout } = await execFileAsync(pythonCmd, [pythonScript, input.filePath], {
-      timeout: config.ocr.timeoutMs,
+      timeout: timeoutMs,
+      signal,
       maxBuffer: 1024 * 1024 * 4,
       env: {
         ...process.env,
@@ -84,6 +108,9 @@ async function runPaddleProvider(
     }
     return result;
   } catch (error) {
+    if (signal && isAbortLikeError(error)) {
+      throw error;
+    }
     return buildEmptyOcrResult("paddleocr", `PaddleOCR failed: ${summarizeExecError(error)}`);
   }
 }
@@ -91,6 +118,8 @@ async function runPaddleProvider(
 async function runMacOsVision(
   input: ImageInput,
   config: VisionBridgeConfig,
+  timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<OcrResult> {
   if (process.platform !== "darwin") {
     return buildEmptyOcrResult("macos_vision", "macOS Vision OCR unavailable on this platform");
@@ -100,8 +129,12 @@ async function runMacOsVision(
     "../../scripts/macos_vision_ocr.swift",
   );
   try {
-    const { stdout } = await execFileAsync("swift", [swiftScript, input.filePath], {
-      timeout: config.ocr.timeoutMs,
+    const binaryPath = await resolveMacOsVisionBinary(swiftScript);
+    const command = binaryPath || "swift";
+    const args = binaryPath ? [input.filePath] : [swiftScript, input.filePath];
+    const { stdout } = await execFileAsync(command, args, {
+      timeout: timeoutMs,
+      signal,
       maxBuffer: 1024 * 1024 * 4,
     });
     const parsed = JSON.parse(stdout) as {
@@ -118,6 +151,9 @@ async function runMacOsVision(
     }
     return result;
   } catch (error) {
+    if (signal && isAbortLikeError(error)) {
+      throw error;
+    }
     return buildEmptyOcrResult("macos_vision", `macOS Vision OCR failed: ${summarizeExecError(error)}`);
   }
 }
@@ -138,9 +174,10 @@ function normalizeProviderPayload(
   };
 }
 
-function resolveProviderOrder(config: VisionBridgeConfig): OcrProviderName[] {
-  if (config.ocr.provider === "paddleocr") return ["paddleocr"];
-  if (config.ocr.provider === "macos_vision") return ["macos_vision"];
+export function resolveProviderOrder(config: VisionBridgeConfig): OcrProviderName[] {
+  if (config.ocr.provider === "paddleocr" || config.ocr.provider === "macos_vision") {
+    return uniqueProviders([config.ocr.provider, ...config.ocr.fallbackOrder]);
+  }
   if (config.ocr.provider === "auto") {
     return uniqueProviders(config.ocr.fallbackOrder);
   }
@@ -149,6 +186,28 @@ function resolveProviderOrder(config: VisionBridgeConfig): OcrProviderName[] {
 
 function uniqueProviders(providers: Array<"paddleocr" | "macos_vision">): OcrProviderName[] {
   return [...new Set(providers)];
+}
+
+export function resolveRemainingOcrBudget(
+  startedAtMs: number,
+  timeoutMs: number,
+  nowMs: number = Date.now(),
+): number {
+  return Math.max(0, timeoutMs - Math.max(0, nowMs - startedAtMs));
+}
+
+export function shouldAttemptOcrProvider(remainingMs: number): boolean {
+  return remainingMs >= OCR_MIN_PROVIDER_TIMEOUT_MS;
+}
+
+export function resolveProviderAttemptTimeoutMs(
+  provider: OcrProviderName,
+  remainingMs: number,
+): number {
+  return Math.max(
+    OCR_MIN_PROVIDER_TIMEOUT_MS,
+    Math.min(remainingMs, OCR_PROVIDER_TIMEOUT_CAP_MS[provider]),
+  );
 }
 
 async function resolvePythonCommand(pythonScript: string): Promise<string> {
@@ -162,6 +221,64 @@ async function resolvePythonCommand(pythonScript: string): Promise<string> {
     return localVenvPython;
   }
   return "python3";
+}
+
+async function resolveMacOsVisionBinary(swiftScript: string): Promise<string | null> {
+  if (macOsVisionBinaryPromise) {
+    return macOsVisionBinaryPromise;
+  }
+  macOsVisionBinaryPromise = buildMacOsVisionBinary(swiftScript).catch(() => null);
+  return macOsVisionBinaryPromise;
+}
+
+export async function prewarmOcrRuntime(
+  config: VisionBridgeConfig,
+  logger?: {
+    info?: (message: string) => void;
+    warn?: (message: string) => void;
+  },
+): Promise<void> {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  if (!resolveProviderOrder(config).includes("macos_vision")) {
+    return;
+  }
+
+  const swiftScript = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    "../../scripts/macos_vision_ocr.swift",
+  );
+  try {
+    const binaryPath = await resolveMacOsVisionBinary(swiftScript);
+    if (binaryPath) {
+      logger?.info?.(`Vision Bridge prewarmed macOS Vision OCR binary at ${binaryPath}`);
+      return;
+    }
+    logger?.warn?.("Vision Bridge could not prewarm macOS Vision OCR binary; falling back to swift runtime");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger?.warn?.(`Vision Bridge prewarm failed: ${message}`);
+  }
+}
+
+async function buildMacOsVisionBinary(swiftScript: string): Promise<string> {
+  const extensionRoot = path.resolve(path.dirname(swiftScript), "..");
+  const cacheDir = path.join(extensionRoot, ".cache");
+  const binaryPath = path.join(cacheDir, "macos_vision_ocr");
+  await mkdir(cacheDir, { recursive: true });
+
+  const sourceStat = await stat(swiftScript);
+  const binaryStat = await stat(binaryPath).catch(() => null);
+  if (binaryStat && binaryStat.mtimeMs >= sourceStat.mtimeMs) {
+    return binaryPath;
+  }
+
+  await execFileAsync("swiftc", ["-O", "-o", binaryPath, swiftScript], {
+    timeout: MACOS_VISION_BUILD_TIMEOUT_MS,
+    maxBuffer: 1024 * 1024 * 4,
+  });
+  return binaryPath;
 }
 
 async function exists(filePath: string): Promise<boolean> {
@@ -187,6 +304,18 @@ function summarizeExecError(error: unknown): string {
   }
   const firstLine = error.message.split("\n")[0]?.trim();
   return firstLine || "OCR execution failed";
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const details = error as Error & { code?: string };
+  return (
+    error.name === "AbortError" ||
+    details.code === "ABORT_ERR" ||
+    error.message.toLowerCase().includes("aborted")
+  );
 }
 
 export function isConfiguredOcrProvider(config: VisionBridgeConfig): boolean {

@@ -8,6 +8,7 @@ import {
   validateVisionBridgeConfig,
 } from "./src/config.ts";
 import { serializeVisionHandoff } from "./src/handoff.ts";
+import { prewarmOcrRuntime } from "./src/ocr/paddleocr.ts";
 import { buildVisionPromptContext } from "./src/prompt-context.ts";
 
 const VISION_BRIDGE_PROMPT_GUIDANCE = [
@@ -159,7 +160,8 @@ const plugin = {
 
     const validation = validateVisionBridgeConfig(config);
     if (!validation.valid) {
-      api.logger.warn(`Vision Bridge config invalid: ${validation.errors.join("; ")}`);
+      api.logger.error(`Vision Bridge disabled due to invalid config: ${validation.errors.join("; ")}`);
+      return;
     }
 
     api.logger.info("Vision Bridge loaded");
@@ -234,6 +236,7 @@ const plugin = {
       id: "vision-bridge-runtime",
       start: () => {
         api.logger.info("Vision Bridge runtime started");
+        void prewarmOcrRuntime(config, api.logger);
       },
       stop: () => {
         api.logger.info("Vision Bridge runtime stopped");
